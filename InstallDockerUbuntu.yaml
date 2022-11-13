@@ -1,0 +1,39 @@
+- name: "Install docker on Xubuntu slave"
+  hosts: "web_Xubuntu"
+  become: True
+  tasks:
+        - name: "Update repository"
+          apt: 
+              update_cache: "yes"
+        - name: "Installing requirements"
+          apt:
+              name:
+                   - "ca-certificates"
+                   - "curl"
+                   - "gnupg"
+                   - "lsb-release"
+              state: latest
+        - name: "creating keyring dir if not existing"
+          file:
+               path: "/etc/apt/keyrings"
+               state: directory
+               recurse: yes
+        - name: "Adding docker's GPHG key"
+          shell: 'curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg || /bin/true'
+          async: 20
+          poll: 2
+        - name: "Setting up repo"
+          shell:
+                'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null'
+        - name: "Re-Update repository"
+          apt: 
+              update_cache: "yes"
+        - name: "Installing docker"
+          apt:
+              name:
+                   - "docker-ce"
+                   - "docker-ce-cli"
+                   - "containerd.io"
+                   - "docker-compose-plugin"
+              state: latest
+        
