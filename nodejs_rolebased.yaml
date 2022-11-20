@@ -1,0 +1,5 @@
+- name: Install nodejs on all hosts using role
+  hosts: all
+  become: True
+  roles:
+    - role:  geerlingguy.nodejs

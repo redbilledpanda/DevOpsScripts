@@ -1,0 +1,8 @@
+- name: Template a file to /etc/systeminfo.txt
+  hosts: all
+  tasks:
+    - name: templating
+      ansible.builtin.template:
+        src: systeminfo.j2
+        dest: /etc/systeminfo.txt
+    
