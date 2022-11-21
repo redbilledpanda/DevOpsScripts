@@ -1,0 +1,16 @@
+---
+# tasks file for infra-setup
+- name: ensure user is created
+  user:
+          name: "{{ item.name }}"
+          state: "{{ item.state}}"
+  loop: "{{ user}}"
+- name: apache2 is installed
+  apt:
+          name: apache2
+          state: present
+  notify: ensure apache service is running and enabled
+- name: infra webpage is populated
+  template:
+          src: webpage.j2
+          dest: /var/www/html/index.html

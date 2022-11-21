@@ -1,0 +1,7 @@
+---
+# handlers file for infra-setup
+- name: ensure apache service is running and enabled
+  service:
+          name: apache2
+          state: started
+          enabled: yes

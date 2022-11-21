@@ -1,0 +1,7 @@
+---
+# vars file for infra-setup
+users: 
+- name: greg
+  state: present
+- name: boris
+  state: present

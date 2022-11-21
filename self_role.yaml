@@ -1,0 +1,14 @@
+- name: play to demonstrate custom role
+  hosts: database
+  become: true
+  roles:
+          - role: infra-setup
+            user: 
+            - name: amit
+              state: absent
+            - name: deepak
+              state: present
+            - name: irshad
+              state: absent
+            - name: alex
+              state: present
