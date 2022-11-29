@@ -37,25 +37,25 @@
                    - "docker-compose"
                    - "docker-compose-plugin"
               state: latest
-              notify: Docker Post Installation
+          notify:
+            - adding user to docker group
+            - re-evaluating group membership
+            - start docker and containerd
   handlers:
-    - name: Docker Post Installation
-      tasks:
-        - name: add user to docker group
-          ansible.builtin.user:
-            name: {{ ansible_user_id }}
-            append: true
-            groups: docker
-        - name: enable docker service
-          ansible.builtin.systemd:
-            - name: docker
-              state: started
-              enabled: true
-            - name: containerd
-              state: started
-              enable: true
-        - name: re-evaluate group membership
-          shell:
-            'newgrp docker || /bin/true'
+    - name: adding user to docker group
+      user:
+        name: "{{ ansible_user_id }}"
+        groups: docker
+        append: "yes"
 
-        
+    - name: re-evaluating group membership
+      shell:
+        'newgrp docker || /bin/true'
+
+    - name: start docker and containerd
+      systemd:
+        name: 
+          - docker
+          - containerd
+        state: started
+        enabled: true
