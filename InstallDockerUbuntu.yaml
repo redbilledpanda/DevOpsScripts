@@ -1,5 +1,5 @@
 - name: "Install docker on Xubuntu slave"
-  hosts: "web_Xubuntu"
+  hosts: "{{ variable_host | default('web') }}"
   become: True
   tasks:
         - name: "Update repository"
@@ -34,6 +34,28 @@
                    - "docker-ce"
                    - "docker-ce-cli"
                    - "containerd.io"
+                   - "docker-compose"
                    - "docker-compose-plugin"
               state: latest
+              notify: Docker Post Installation
+  handlers:
+    - name: Docker Post Installation
+      tasks:
+        - name: add user to docker group
+          ansible.builtin.user:
+            name: {{ ansible_user_id }}
+            append: true
+            groups: docker
+        - name: enable docker service
+          ansible.builtin.systemd:
+            - name: docker
+              state: started
+              enabled: true
+            - name: containerd
+              state: started
+              enable: true
+        - name: re-evaluate group membership
+          shell:
+            'newgrp docker || /bin/true'
+
         
