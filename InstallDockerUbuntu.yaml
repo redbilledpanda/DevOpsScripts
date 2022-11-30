@@ -40,22 +40,32 @@
           notify:
             - adding user to docker group
             - re-evaluating group membership
-            - start docker and containerd
+            - start docker
+            - start containerd
   handlers:
     - name: adding user to docker group
       user:
-        name: "{{ ansible_user_id }}"
+        name: "{{ ansible_env.SUDO_USER }}"
         groups: docker
         append: "yes"
 
+    - name: check if user added
+      debug:
+        msg: "user added"
+
     - name: re-evaluating group membership
+      become: false
       shell:
         'newgrp docker || /bin/true'
 
-    - name: start docker and containerd
+    - name: start docker
       systemd:
-        name: 
-          - docker
-          - containerd
+        name: docker
+        state: started
+        enabled: true
+
+    - name: start containerd
+      systemd:
+        name: containerd
         state: started
         enabled: true
