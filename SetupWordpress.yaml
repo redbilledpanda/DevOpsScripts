@@ -55,7 +55,7 @@
               sudo php /tmp/composer-setup.php 
               --install-dir=/usr/local/bin 
               --filename=composer
-          register: output
+          register: out
         - debug:
             msg: |
               "cmd output is: "
