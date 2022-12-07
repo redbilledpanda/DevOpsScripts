@@ -1,0 +1,47 @@
+- name: "Install docker on Xubuntu slave"
+  hosts: all
+  become: True
+  gather_facts: no
+  vars:
+    get_installer: 'curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php || /bin/true'
+    get_signature: 'curl -sS https://composer.github.io/installer.sig'
+  tasks:
+        - name: "Installing requirements"
+          apt:
+            name:
+                 - "curl"
+                 - "php"
+                 - "php-cli"
+                 - "gnupg"
+                 - "unzip"
+            state: latest
+        - name: "get composer installer"
+          shell: 
+            cmd: "{{ item }}"
+          with_items:
+            - "{{ get_installer }}"
+          async: 20
+          poll: 2
+        - name: "Verify installer "
+          shell:
+                # "echo 'curl -sS https://composer.github.io/installer.sig'"
+                # doesn't do the trick as it merely echoes the cmd string back
+                # and that's not what we want
+                "{{ get_signature }}"
+          register: HASH # store the hash into a variable named HASH
+        - name: "setting env"
+          shell:
+            cmd:
+              php -r 
+              "if (hash_file('SHA384', '/tmp/composer-setup.php') === '$hashVal') 
+              { echo 'Installer verified'; } 
+              else { echo 'Installer corrupt'; unlink('composer-setup.php'); } 
+              echo PHP_EOL;"
+          register: status
+          environment:
+            hashVal: "{{ HASH.stdout }}" 
+
+        - debug: 
+            msg: 
+              - "hash is {{ HASH.stdout }}" # skipping the brace doesn't work
+              - "status is {{ status.stdout }}"
