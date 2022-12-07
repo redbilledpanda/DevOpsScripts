@@ -1,7 +1,7 @@
 - name: "Install composer on Xubuntu slave"
   hosts: all
   become: True
-  gather_facts: no
+  gather_facts: yes
   vars:
     get_installer: 'curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php || /bin/true'
     get_signature: 'curl -sS https://composer.github.io/installer.sig'
@@ -23,6 +23,7 @@
                  - "php-mysql"
             state: present
         - name: "Check if composer already installed"
+          become_user: "{{ ansible_env.SUDO_USER }}"
           shell:
             cmd: "composer"
           register: IsComposer
@@ -41,7 +42,6 @@
                 # and that's not what we want
                 "{{ get_signature }}"
           register: HASH # store the hash into a variable named HASH
-          when: IsComposer.rc == 0
           when: IsComposer.rc != 0
         - name: "Verify installer "
           shell:
@@ -54,12 +54,11 @@
           register: status
           environment:
             hashVal: "{{ HASH.stdout }}" 
-          when: IsComposer.rc == 0
           when: IsComposer.rc != 0
 
         - fail:
             msg: "Installer corrupt retry later"
-          when: "status.stdout == 'Installer corrupt'"
+          when: (IsComposer.rc != 0) and (status.stdout == 'Installer corrupt')
 
         - debug: 
             msg: 
