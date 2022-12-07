@@ -22,6 +22,10 @@
                  - "php-fpm"
                  - "php-mysql"
             state: latest
+        - name: "Check if composer already installed"
+          shell:
+            cmd: "composer"
+          register: IsComposer
         - name: "get composer installer"
           shell: 
             cmd: "{{ item }}"
@@ -29,6 +33,7 @@
             - "{{ get_installer }}"
           async: 20
           poll: 2
+          when: IsComposer.rc != 0
         - name: "Getting composer installer signature "
           shell:
                 # "echo 'curl -sS https://composer.github.io/installer.sig'"
@@ -36,6 +41,8 @@
                 # and that's not what we want
                 "{{ get_signature }}"
           register: HASH # store the hash into a variable named HASH
+          when: IsComposer.rc == 0
+          when: IsComposer.rc != 0
         - name: "Verify installer "
           shell:
             cmd: >
@@ -47,6 +54,8 @@
           register: status
           environment:
             hashVal: "{{ HASH.stdout }}" 
+          when: IsComposer.rc == 0
+          when: IsComposer.rc != 0
 
         - fail:
             msg: "Installer corrupt retry later"
@@ -56,6 +65,7 @@
             msg: 
               - "hash is {{ HASH.stdout }}" # skipping the brace doesn't work
               - "status is {{ status.stdout }}"
+          when: IsComposer.rc != 0
 
         - name: "Installing composer"
           shell:
@@ -64,7 +74,12 @@
               --install-dir=/usr/local/bin 
               --filename=composer
           register: out
+          when: IsComposer.rc != 0
         - debug:
             msg: |
               "cmd output is: "
               "{{ out.stdout }}"
+          when: IsComposer.rc != 0
+        - debug:
+            msg: "composer already installed"
+          when: IsComposer.rc == 0
