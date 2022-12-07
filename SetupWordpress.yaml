@@ -21,7 +21,7 @@
                  - "mysql-server"
                  - "php-fpm"
                  - "php-mysql"
-            state: latest
+            state: present
         - name: "Check if composer already installed"
           shell:
             cmd: "composer"
