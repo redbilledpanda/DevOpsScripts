@@ -1,4 +1,4 @@
-- name: "Install composer on Xubuntu slave"
+- name: "Setting up wordpress with LEMP stack on ubuntu"
   hosts: all
   become: True
   gather_facts: yes
