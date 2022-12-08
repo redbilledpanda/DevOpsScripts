@@ -24,6 +24,7 @@
             state: present
         - name: "Check if composer already installed"
           become_user: "{{ ansible_env.SUDO_USER }}"
+          ignore_errors: yes
           shell:
             cmd: "composer"
           register: IsComposer
