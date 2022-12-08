@@ -1,4 +1,4 @@
-- name: "Setting up wordpress with LEMP stack on ubuntu"
+- name: "Installing wordpress dependencies"
   hosts: all
   become: True
   gather_facts: yes
@@ -21,6 +21,17 @@
                  - "mysql-server"
                  - "php-fpm"
                  - "php-mysql"
+                 - apache2
+                 - ghostscript
+                 - libapache2-mod-php
+                 - php-bcmath
+                 - php-curl
+                 - php-imagick
+                 - php-intl
+                 - php-json
+                 - php-mbstring
+                 - php-xml
+                 - php-zip
             state: present
         - name: "Check if composer already installed"
           become_user: "{{ ansible_env.SUDO_USER }}"
@@ -83,3 +94,21 @@
         - debug:
             msg: "composer already installed"
           when: IsComposer.rc == 0
+
+- name: Installing wordpress through source
+  hosts: all
+  become: True
+  tasks:
+    - name: creating /var/www for wordpress source
+      file:
+        path: "/srv/www"
+        recurse: yes
+        state: directory
+        owner: www-data
+    - name: downloading and extracting wordpress source
+      shell:
+        cmd: "curl https://wordpress.org/latest.tar.gz | sudo -u www-data tar zx -C /srv/www"
+      register: status
+    - fail:
+        msg: "Unable to download or extract wordpress source"
+      when: status.rc != 0
