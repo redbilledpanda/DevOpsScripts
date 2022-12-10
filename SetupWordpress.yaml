@@ -21,17 +21,17 @@
                  - "mysql-server"
                  - "php-fpm"
                  - "php-mysql"
-                 - apache2
-                 - ghostscript
-                 - libapache2-mod-php
-                 - php-bcmath
-                 - php-curl
-                 - php-imagick
-                 - php-intl
-                 - php-json
-                 - php-mbstring
-                 - php-xml
-                 - php-zip
+                 - "apache2"
+                 - "ghostscript"
+                 - "libapache2-mod-php"
+                 - "php-bcmath"
+                 - "php-curl"
+                 - "php-imagick"
+                 - "php-intl"
+                 - "php-json"
+                 - "php-mbstring"
+                 - "php-xml"
+                 - "php-zip"
             state: present
         - name: "Check if composer already installed"
           become_user: "{{ ansible_env.SUDO_USER }}"
@@ -98,17 +98,48 @@
 - name: Installing wordpress through source
   hosts: all
   become: True
+  vars:
+    wprootdir: "/srv/www"
   tasks:
+    - name: checking if wp src dir exists
+      stat:
+        path: "{{ wprootdir }}"
+      register: dir_details
     - name: creating /var/www for wordpress source
       file:
-        path: "/srv/www"
+        #path: "'{{ wp-root-dir }}' + 'wordpress'" 
+        path: "/srv/www/wordpress" 
         recurse: yes
         state: directory
         owner: www-data
+      when: dir_details.stat.exists
     - name: downloading and extracting wordpress source
       shell:
         cmd: "curl https://wordpress.org/latest.tar.gz | sudo -u www-data tar zx -C /srv/www"
       register: status
+      when: dir_details.stat.exists
     - fail:
         msg: "Unable to download or extract wordpress source"
-      when: status.rc != 0
+      when: (dir_details.stat.exists) and (status.rc != 0)
+
+- name: Configuring apache for wordpress
+  hosts: all
+  become: True
+  vars:
+    wprootdir: "/srv/www"
+  tasks:
+    - name: "checking if wp conf file exists"
+      stat:
+        path: "/etc/apache2/sites-available/wordpress.conf"
+      register: file_details
+    - name: creating /var/www for wordpress source
+      file:
+        #path: "'{{ wp-root-dir }}' + 'wordpress'" 
+        path: "/etc/apache2/sites-available/wordpress.conf"
+        state: touch
+        owner: www-data
+    - name: creating wordpress conf file
+      template:
+        src: apache2.j2
+        dest: /etc/apache2/sites-available/wordpress.conf
+      #when: file_details.stat.exists=false
