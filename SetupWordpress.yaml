@@ -126,16 +126,21 @@
   hosts: all
   become: True
   vars:
-    wprootdir: "/srv/www"
+    wprootdir: "/srv/www/wordpress"
+    wpconffile: "/etc/apache2/sites-available/wordpress.conf"
   tasks:
     - name: "checking if wp conf file exists"
       stat:
-        path: "/etc/apache2/sites-available/wordpress.conf"
+        path: "{{ wpconffile }}"
       register: file_details
+    - name: deleting the file if it exists
+      file:
+        path: "{{ wpconffile }}"
+        state: absent
+      when: file_details.stat.exists
     - name: creating /var/www for wordpress source
       file:
-        #path: "'{{ wp-root-dir }}' + 'wordpress'" 
-        path: "/etc/apache2/sites-available/wordpress.conf"
+        path: "{{ wpconffile }}"
         state: touch
         owner: www-data
     - name: creating wordpress conf file
@@ -143,3 +148,16 @@
         src: apache2.j2
         dest: /etc/apache2/sites-available/wordpress.conf
       #when: file_details.stat.exists=false
+    - name: enabling the site
+      shell:
+        cmd: "a2ensite wordpress"
+    - name: enable URL rewriting
+      shell:
+        cmd: "a2enmod rewrite"
+    - name: disable default "it works" site
+      shell:
+        cmd: "a2dissite 000-default"
+    - name: restart apache2
+      service:
+        name: apache2
+        state: reloaded
