@@ -112,12 +112,12 @@
         recurse: yes
         state: directory
         owner: www-data
-      when: dir_details.stat.exists
+      when: (dir_details.stat.exists = 0)
     - name: downloading and extracting wordpress source
       shell:
         cmd: "curl https://wordpress.org/latest.tar.gz | sudo -u www-data tar zx -C /srv/www"
       register: status
-      when: dir_details.stat.exists
+      when: (dir_details.stat.exists = 1)
     - fail:
         msg: "Unable to download or extract wordpress source"
       when: (dir_details.stat.exists) and (status.rc != 0)
