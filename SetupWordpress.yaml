@@ -33,6 +33,10 @@
                  - "php-xml"
                  - "php-zip"
             state: present
+        - name: "stopping nginx if running"
+          service:
+            name: nginx
+            state: stopped
         - name: "Check if composer already installed"
           become_user: "{{ ansible_env.SUDO_USER }}"
           ignore_errors: yes
@@ -161,3 +165,41 @@
       service:
         name: apache2
         state: reloaded
+
+- name: Configuring database
+  hosts: all
+  become: True
+  gather_facts: yes
+  vars:
+    mysql_port: 3306
+    mysql_socket: /var/run/mysqld/mysqld.sock
+    mysql_superuser: root
+    mysql_superuser_home: "{% if mysql_superuser == 'root' %}/root{% else %}/home/{{ mysql_superuser }}{% endif %}"
+    mysql_superuser_password: SuperUserPwd
+  tasks:
+    - name: Installing PyMySql through pip
+      pip:
+        name: PyMySql
+        state: present
+    - name: ensure mysql is running and starts on boot
+      service:
+        name: mysql
+        state: started
+        enabled: True
+    - name: adding a password for root user
+      mysql_user:
+        # Update the superuser to have all grants and a password
+        name: "{{ mysql_superuser }}"
+        host: localhost
+        password: "{{ mysql_superuser_password }}"
+        priv: "*.*:ALL,GRANT"
+        # Login *as root* to perform this change, even though you might
+        # be altering the root user itself
+        login_user: root
+        login_password: ""
+        login_port: "{{ mysql_port }}"
+        login_host: localhost
+        login_unix_socket: "{{ mysql_socket }}"
+        # As a good measure,have ansible check whether an implicit login
+        # is possible first
+        check_implicit_admin: yes
