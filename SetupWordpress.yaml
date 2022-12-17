@@ -176,6 +176,7 @@
     mysql_superuser: root
     mysql_superuser_home: "{% if mysql_superuser == 'root' %}/root{% else %}/home/{{ mysql_superuser }}{% endif %}"
     mysql_superuser_password: SuperUserPwd
+    mysql_superuser_password_updated: SuperUserPwd
   tasks:
     - name: Installing PyMySql through pip
       pip:
@@ -203,3 +204,14 @@
         # As a good measure,have ansible check whether an implicit login
         # is possible first
         check_implicit_admin: yes
+    - name: Create system-wide mysql configuration file
+      template:
+        src: mysql_sys.cnf.j2
+        dest: /etc/my.cnf
+
+    - name: Create mysql configuration file for `{{ mysql_superuser }}`
+      template:
+        src: mysql_superuser.cnf.j2
+        dest: "{{ mysql_superuser_home }}/.my.cnf"
+      notify:
+      - Restart Mysql
