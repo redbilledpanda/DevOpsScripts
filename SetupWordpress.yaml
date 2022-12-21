@@ -241,8 +241,6 @@
       template:
         src: mysql_superuser.cnf.j2
         dest: "{{ mysql_superuser_home }}/.my.cnf"
-      notify:
-      - Restart Mysql
 
     - name: create database wordpress
       mysql_db: 
@@ -262,6 +260,8 @@
         login_db: wordpress
         query: FLUSH PRIVILEGES  
 
+      notify:
+      - Restart Mysql
 
   handlers:
     - name: Restart Mysql
