@@ -176,7 +176,7 @@
     mysql_superuser: root
     mysql_superuser_home: "{% if mysql_superuser == 'root' %}/root{% else %}/home/{{ mysql_superuser }}{% endif %}"
     mysql_superuser_password: SuperUserPwd
-    mysql_superuser_password_updated: SuperUserPwd
+    mysql_wordpress_password: WordpressPwd
   tasks:
     - name: Installing PyMySql through pip
       pip:
@@ -187,6 +187,13 @@
         name: mysql
         state: started
         enabled: True
+
+    - name: Removes anonymous user account for localhost
+      community.mysql.mysql_user:
+        name: ''
+        state: absent
+        login_unix_socket: "{{ mysql_socket }}"
+
     - name: adding a password for root user
       mysql_user:
         # Update the superuser to have all grants and a password
@@ -204,6 +211,27 @@
         # As a good measure,have ansible check whether an implicit login
         # is possible first
         check_implicit_admin: yes
+      when: ansible_local.mysqlpwd.mysql_superuser_password is undefined      
+    - name: "Create custom fact directory"
+      file:
+        path: "/etc/ansible/facts.d"
+        state: "directory"
+        recurse: yes
+      when: ansible_local.mysqlpwd.mysql_superuser_password is undefined      
+    - name: "record root password in a custom fact"
+      template:
+        src: mysqlpwd.j2
+        dest: /etc/ansible/facts.d/mysqlpwd.fact
+        mode: 0644
+      when: ansible_local.mysqlpwd.mysql_superuser_password is undefined      
+    - name: "re-run setup to use custom facts"
+      setup:
+        filter: ansible_local
+      when: ansible_local.mysqlpwd.mysql_superuser_password is undefined      
+    - debug:
+        msg:
+          - "my sql password is {{ ansible_local.mysqlpwd.mysql_superuser_password }}"
+      when: ansible_local.mysqlpwd.mysql_superuser_password is defined      
     - name: Create system-wide mysql configuration file
       template:
         src: mysql_sys.cnf.j2
@@ -215,3 +243,28 @@
         dest: "{{ mysql_superuser_home }}/.my.cnf"
       notify:
       - Restart Mysql
+
+    - name: create database wordpress
+      mysql_db: 
+        db: wordpress
+        state: present
+        login_unix_socket: "{{ mysql_socket }}"
+
+    - name: Create database user 'wordpress' and password '12345' with all database privileges
+      community.mysql.mysql_user:
+        name: wordpress
+        password: "{{ mysql_wordpress_password }}"
+        priv: '*.*:ALL'
+        state: present
+
+    - name: Flush privileges
+      mysql_query:
+        login_db: wordpress
+        query: FLUSH PRIVILEGES  
+
+
+  handlers:
+    - name: Restart Mysql
+      service:
+        name: mysql
+        state: restarted

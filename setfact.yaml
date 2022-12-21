@@ -3,6 +3,9 @@
   tasks:
     - name: setting a new fact
       set_fact:
-        ansible_mysql_root_pwd_updated: True
+        pwd_updated: True
         cacheable: yes
-      when: mysql_root_pwd_updated is undefined
+      when: ansible_facts["mysql_root_pwd_updated"] is not defined
+    - debug: 
+        var: pwd_updated
+      when: ansible_facts["mysql_root_pwd_updated"] is defined
