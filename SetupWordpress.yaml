@@ -1,7 +1,7 @@
 - name: "Installing wordpress dependencies"
   hosts: all
   become: True
-  gather_facts: yes
+  gather_facts: True
   vars:
     get_installer: 'curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php || /bin/true'
     get_signature: 'curl -sS https://composer.github.io/installer.sig'
@@ -102,6 +102,7 @@
 - name: Installing wordpress through source
   hosts: all
   become: True
+  gather_facts: False
   vars:
     wprootdir: "/srv/www/wordpress"
   tasks:
@@ -109,6 +110,22 @@
       stat:
         path: "{{ wprootdir }}"
       register: dir_details
+    - name: create list of files comprising wordpress source
+      find:
+        paths: "{{ wprootdir }}"
+        hidden: true
+        recurse: true
+        file_type: any
+      register: path_list
+    - name: delete existing wordpress source files
+      become_user: www-data
+      no_log: True
+      file:
+        #path: "{{ item.path }}"
+        #recurse: True
+        path: "{{ wprootdir }}"
+        state: absent
+      #with_items: "{{ path_list.files }}"
     - name: creating /var/www for wordpress source
       file:
         #path: "'{{ wp-root-dir }}' + 'wordpress'" 
@@ -129,6 +146,7 @@
 - name: Configuring apache for wordpress
   hosts: all
   become: True
+  gather_facts: False
   vars:
     wprootdir: "/srv/www/wordpress"
     wpconffile: "/etc/apache2/sites-available/wordpress.conf"
@@ -169,7 +187,8 @@
 - name: Configuring database
   hosts: all
   become: True
-  gather_facts: yes
+  gather_facts: True
+  #gather_facts: yes
   vars:
     mysql_port: 3306
     mysql_socket: /var/run/mysqld/mysqld.sock
@@ -211,27 +230,27 @@
         # As a good measure,have ansible check whether an implicit login
         # is possible first
         check_implicit_admin: yes
-      when: ansible_local.mysqlpwd.mysql_superuser_password is undefined      
+      when: ansible_local.mysqlinfo.mysql_superuser_password is undefined      
     - name: "Create custom fact directory"
       file:
         path: "/etc/ansible/facts.d"
         state: "directory"
         recurse: yes
-      when: ansible_local.mysqlpwd.mysql_superuser_password is undefined      
-    - name: "record root password in a custom fact"
+      when: ansible_local.mysqlinfo.mysql_superuser_password is undefined      
+    - name: "record mysql info in custom fact"
       template:
-        src: mysqlpwd.j2
-        dest: /etc/ansible/facts.d/mysqlpwd.fact
+        src: mysqlinfo.j2
+        dest: /etc/ansible/facts.d/mysqlinfo.fact
         mode: 0644
-      when: ansible_local.mysqlpwd.mysql_superuser_password is undefined      
+      when: ansible_local.mysqlinfo.mysql_superuser_password is undefined      
     - name: "re-run setup to use custom facts"
       setup:
         filter: ansible_local
-      when: ansible_local.mysqlpwd.mysql_superuser_password is undefined      
+      when: ansible_local.mysqlinfo.mysql_superuser_password is undefined      
     - debug:
         msg:
-          - "my sql password is {{ ansible_local.mysqlpwd.mysql_superuser_password }}"
-      when: ansible_local.mysqlpwd.mysql_superuser_password is defined      
+          - "my sql password is {{ ansible_local.mysqlinfo.mysql_superuser_password }}"
+      when: ansible_local.mysqlinfo.mysql_superuser_password is defined      
     - name: Create system-wide mysql configuration file
       template:
         src: mysql_sys.cnf.j2
@@ -262,6 +281,42 @@
 
       notify:
       - Restart Mysql
+
+- name: Configuring wordpress to connect to the database
+  hosts: all
+  gather_facts: False
+  become: true
+  vars:
+    wpconfigfile: "/srv/www/wordpress/wp-config.php"
+  tasks:
+    - name: copy sample config to wp-config.php
+      #become_user: www-data
+      copy:
+        remote_src: yes
+        src: /srv/www/wordpress/wp-config-sample.php
+        dest: "{{ wpconfigfile }}"
+        owner: www-data
+
+    - name: "re-run setup to use custom facts"
+      setup:
+        filter: ansible_local
+    - name: set database credentials in the config file
+      become: false
+      #become_user: www-data
+      #become_method: "su"
+      # multiple commands are run like this whereas with
+      # single command one can use a cmd paramater
+      # since this is technically *not* a list passed to /bin/sh
+      # we do not need a list here. Instead it is a series of 
+      # commands being passed to /bin/sh
+      #shell: |
+      # apparently, passing this list directly doesn't seem to work
+      # what works is this loop
+      command: "{{ item }}"
+      with_items:
+        - "sudo -u www-data sed -i s/database_name_here/wordpress/ {{ wpconfigfile }}"
+        - "sudo -u www-data sed -i s/username_here/wordpress/ {{ wpconfigfile }}"
+        - "sudo -u www-data sed -i s/password_here/{{ ansible_local.mysqlinfo.mysql_superuser_password }}/ {{ wpconfigfile }}"
 
   handlers:
     - name: Restart Mysql
