@@ -17,7 +17,6 @@
                  - "php-cli"
                  - "gnupg"
                  - "unzip"
-                 - "nginx"
                  - "mysql-server"
                  - "php-fpm"
                  - "php-mysql"
@@ -37,6 +36,11 @@
           service:
             name: nginx
             state: stopped
+        - name: "remove nginx if installed"
+          apt:
+            name:
+                - "nginx"
+            state: absent
         - name: "Check if composer already installed"
           become_user: "{{ ansible_env.SUDO_USER }}"
           ignore_errors: yes
@@ -110,13 +114,6 @@
       stat:
         path: "{{ wprootdir }}"
       register: dir_details
-    - name: create list of files comprising wordpress source
-      find:
-        paths: "{{ wprootdir }}"
-        hidden: true
-        recurse: true
-        file_type: any
-      register: path_list
     - name: delete existing wordpress source files
       become_user: www-data
       no_log: True
@@ -317,6 +314,38 @@
         - "sudo -u www-data sed -i s/database_name_here/wordpress/ {{ wpconfigfile }}"
         - "sudo -u www-data sed -i s/username_here/wordpress/ {{ wpconfigfile }}"
         - "sudo -u www-data sed -i s/password_here/{{ ansible_local.mysqlinfo.mysql_superuser_password }}/ {{ wpconfigfile }}"
+    - name: get random secret keys
+      uri:
+        url: https://api.wordpress.org/secret-key/1.1/salt/
+        return_content: yes
+        body_format: json
+      register: wordpress_keys
+    - debug:
+        var: wordpress_keys.content
+    - name: delete existing bak file
+      file:
+        path: "{{ wpconfigfile }}.bak"
+        state: absent
+    - name: run script to remove key placeholders
+      become_user: www-data
+      script:
+        chdir: /srv/www/wordpress/
+        cmd: replacelines.py
+        executable: /usr/bin/python3
+        environment: /srv/www/wordpress/
+    - name: update config file
+      become_user: www-data
+      copy:
+        remote_src: yes
+        src: "{{ wpconfigfile }}.bak"
+        dest: "{{ wpconfigfile }}"
+    - blockinfile:
+        path: "{{ wpconfigfile }}"
+        marker: // {mark} ANSIBLE MANAGED BLOCK  
+        # having this separator here was giving me issues   
+        #block: |
+        block:
+          "{{ wordpress_keys.content }}"
 
   handlers:
     - name: Restart Mysql
