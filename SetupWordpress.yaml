@@ -203,12 +203,15 @@
         name: mysql
         state: started
         enabled: True
-
+          
     - name: Removes anonymous user account for localhost
       community.mysql.mysql_user:
         name: ''
         state: absent
+        login_user: root
+        login_password: ""
         login_unix_socket: "{{ mysql_socket }}"
+      when: ansible_local.mysqlinfo.mysql_superuser_password is undefined      
 
     - name: adding a password for root user
       mysql_user:
