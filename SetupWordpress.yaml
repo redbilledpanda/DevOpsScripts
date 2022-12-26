@@ -104,22 +104,21 @@
     wprootdir: "/srv/www/wordpress"
     wpconffile: "/etc/apache2/sites-available/wordpress.conf"
   tasks:
+    - name: deleting the file if it exists
+      file:
+        path: "{{ wpconffile }}"
+        state: absent
+    - name: creating wordpress conf file
+      file:
+        path: "{{ wpconffile }}"
+        state: touch
+        owner: www-data
     - name: "checking if wp conf file exists"
       stat:
         path: "{{ wpconffile }}"
       register: file_details
     - debug:
         var: file_details
-    - name: deleting the file if it exists
-      file:
-        path: "{{ wpconffile }}"
-        state: absent
-      when: (file_details.stat.exists == 1)
-    - name: creating wordpress conf file
-      file:
-        path: "{{ wpconffile }}"
-        state: touch
-        owner: www-data
     - name: populating wordpress conf file
       template:
         src: apache2.j2
@@ -244,7 +243,6 @@
       mysql_query:
         login_db: wordpress
         login_user: "{{ ansible_local.mysqlinfo.mysql_superuser }}"
-        name: wordpress
         login_password: "{{ ansible_local.mysqlinfo.mysql_superuser_password }}"
         login_unix_socket: "{{ mysql_socket }}"
         query: FLUSH PRIVILEGES 
