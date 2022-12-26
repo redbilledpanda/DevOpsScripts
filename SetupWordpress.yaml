@@ -113,17 +113,10 @@
         path: "{{ wpconffile }}"
         state: touch
         owner: www-data
-    - name: "checking if wp conf file exists"
-      stat:
-        path: "{{ wpconffile }}"
-      register: file_details
-    - debug:
-        var: file_details
     - name: populating wordpress conf file
       template:
         src: apache2.j2
         dest: "{{ wpconffile }}"
-      when: (file_details.stat.blocks <= 0)
     - name: enabling the site
       shell:
         cmd: "a2ensite wordpress"
