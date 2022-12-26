@@ -32,10 +32,16 @@
                  - "php-xml"
                  - "php-zip"
             state: present
+        - name: Populate service facts
+          ansible.builtin.service_facts:
+        - name: Print service facts
+          ansible.builtin.debug:
+            var: ansible_facts.services
         - name: "stopping nginx if running"
           service:
             name: nginx
             state: stopped
+          when: "'nginx' in ansible_facts.services"
         - name: "remove nginx if installed"
           apt:
             name:
@@ -45,10 +51,12 @@
           service:
             name: mysql
             state: stopped
+          when: "'mysql' in ansible_facts.services"
         - name: stop apache2
           service:
             name: apache2
             state: stopped
+          when: "'apache2' in ansible_facts.services"
         - name: "Check if composer already installed"
           become_user: "{{ ansible_env.SUDO_USER }}"
           ignore_errors: yes
