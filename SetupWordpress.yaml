@@ -57,67 +57,6 @@
             name: apache2
             state: stopped
           when: "'apache2' in ansible_facts.services"
-        - name: "Check if composer already installed"
-          become_user: "{{ ansible_env.SUDO_USER }}"
-          ignore_errors: yes
-          shell:
-            cmd: "composer"
-          register: IsComposer
-        - name: "get composer installer"
-          shell: 
-            cmd: "{{ item }}"
-          with_items:
-            - "{{ get_installer }}"
-          async: 20
-          poll: 2
-          when: IsComposer.rc != 0
-        - name: "Getting composer installer signature "
-          shell:
-                # "echo 'curl -sS https://composer.github.io/installer.sig'"
-                # doesn't do the trick as it merely echoes the cmd string back
-                # and that's not what we want
-                "{{ get_signature }}"
-          register: HASH # store the hash into a variable named HASH
-          when: IsComposer.rc != 0
-        - name: "Verify installer "
-          shell:
-            cmd: >
-              php -r 
-              "if (hash_file('SHA384', '/tmp/composer-setup.php') === '$hashVal') 
-              { echo 'Installer verified'; } 
-              else { echo 'Installer corrupt'; unlink('composer-setup.php'); } 
-              echo PHP_EOL;"
-          register: status
-          environment:
-            hashVal: "{{ HASH.stdout }}" 
-          when: IsComposer.rc != 0
-
-        - fail:
-            msg: "Installer corrupt retry later"
-          when: (IsComposer.rc != 0) and (status.stdout == 'Installer corrupt')
-
-        - debug: 
-            msg: 
-              - "hash is {{ HASH.stdout }}" # skipping the brace doesn't work
-              - "status is {{ status.stdout }}"
-          when: IsComposer.rc != 0
-
-        - name: "Installing composer"
-          shell:
-            cmd: >
-              sudo php /tmp/composer-setup.php 
-              --install-dir=/usr/local/bin 
-              --filename=composer
-          register: out
-          when: IsComposer.rc != 0
-        - debug:
-            msg: |
-              "cmd output is: "
-              "{{ out.stdout }}"
-          when: IsComposer.rc != 0
-        - debug:
-            msg: "composer already installed"
-          when: IsComposer.rc == 0
 
 - name: Installing wordpress through source
   hosts: all
@@ -169,21 +108,23 @@
       stat:
         path: "{{ wpconffile }}"
       register: file_details
+    - debug:
+        var: file_details
     - name: deleting the file if it exists
       file:
         path: "{{ wpconffile }}"
         state: absent
       when: (file_details.stat.exists == 1)
-    - name: creating /var/www for wordpress source
+    - name: creating wordpress conf file
       file:
         path: "{{ wpconffile }}"
         state: touch
         owner: www-data
-    - name: creating wordpress conf file
+    - name: populating wordpress conf file
       template:
         src: apache2.j2
         dest: "{{ wpconffile }}"
-      when: (file_details.stat.exists == 0)
+      when: (file_details.stat.blocks <= 0)
     - name: enabling the site
       shell:
         cmd: "a2ensite wordpress"
@@ -229,7 +170,7 @@
         login_user: root
         login_password: ""
         login_unix_socket: "{{ mysql_socket }}"
-      when: ansible_local.mysqlinfo.mysql_superuser_password is undefined      
+      when: ansible_local.mysqlinfo is undefined      
 
     - name: adding a password for root user
       mysql_user:
@@ -248,53 +189,64 @@
         # As a good measure,have ansible check whether an implicit login
         # is possible first
         check_implicit_admin: yes
-      when: ansible_local.mysqlinfo.mysql_superuser_password is undefined      
+      when: ansible_local.mysqlinfo is undefined      
     - name: "Create custom fact directory"
       file:
         path: "/etc/ansible/facts.d"
         state: "directory"
         recurse: yes
-      when: ansible_local.mysqlinfo.mysql_superuser_password is undefined      
+      when: ansible_local.mysqlinfo is undefined      
     - name: "record mysql info in custom fact"
       template:
         src: mysqlinfo.j2
         dest: /etc/ansible/facts.d/mysqlinfo.fact
         mode: 0644
-      when: ansible_local.mysqlinfo.mysql_superuser_password is undefined      
+      when: ansible_local.mysqlinfo is undefined      
     - name: "re-run setup to use custom facts"
       setup:
         filter: ansible_local
-      when: ansible_local.mysqlinfo.mysql_superuser_password is undefined      
+      when: ansible_local.mysqlinfo is undefined      
     - debug:
         msg:
-          - "my sql password is {{ ansible_local.mysqlinfo.mysql_superuser_password }}"
-      when: ansible_local.mysqlinfo.mysql_superuser_password is defined      
-    - name: Create system-wide mysql configuration file
-      template:
-        src: mysql_sys.cnf.j2
-        dest: /etc/my.cnf
+          - "mysqlinfo is {{ ansible_local.mysqlinfo }}"
+      when: ansible_local.mysqlinfo is defined
+        
+        #- name: Create system-wide mysql configuration file
+        #template:
+        #src: mysql_sys.cnf.j2
+        #dest: /etc/my.cnf
 
-    - name: Create mysql configuration file for `{{ mysql_superuser }}`
-      template:
-        src: mysql_superuser.cnf.j2
-        dest: "{{ mysql_superuser_home }}/.my.cnf"
+        #- name: Create mysql configuration file for `{{ mysql_superuser }}`
+        #template:
+        #src: mysql_superuser.cnf.j2
+        #dest: "{{ mysql_superuser_home }}/.my.cnf"
 
     - name: create database wordpress
       mysql_db: 
         db: wordpress
         state: present
+        login_user: "{{ ansible_local.mysqlinfo.mysql_superuser }}"
+        login_password: "{{ ansible_local.mysqlinfo.mysql_superuser_password }}"
         login_unix_socket: "{{ mysql_socket }}"
+      when: ansible_local.mysqlinfo is defined
 
     - name: Create database user 'wordpress' with all database privileges
       community.mysql.mysql_user:
         name: wordpress
         password: "{{ mysql_wordpress_password }}"
+        login_user: "{{ ansible_local.mysqlinfo.mysql_superuser }}"
+        login_password: "{{ ansible_local.mysqlinfo.mysql_superuser_password }}"
         priv: '*.*:ALL'
         state: present
+      when: ansible_local.mysqlinfo is defined
 
     - name: Flush privileges
       mysql_query:
         login_db: wordpress
+        login_user: "{{ ansible_local.mysqlinfo.mysql_superuser }}"
+        name: wordpress
+        login_password: "{{ ansible_local.mysqlinfo.mysql_superuser_password }}"
+        login_unix_socket: "{{ mysql_socket }}"
         query: FLUSH PRIVILEGES 
 
      # UFW Configuration
@@ -306,6 +258,16 @@
       notify:
       - Restart Mysql
       tags: [ system ]
+
+  handlers:
+    - name: Restart Mysql
+      service:
+        name: mysql
+        state: restarted
+    - name: Restart Apache2
+      service:
+        name: apache2
+        state: restarted
 
 - name: Configuring wordpress to connect to the database
   hosts: all
