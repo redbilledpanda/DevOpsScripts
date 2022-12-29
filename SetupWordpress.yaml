@@ -80,8 +80,7 @@
       #with_items: "{{ path_list.files }}"
     - name: creating /var/www for wordpress source
       file:
-        #path: "'{{ wp-root-dir }}' + 'wordpress'" 
-        path: "/srv/www/wordpress" 
+        path: "{{ wprootdir }}"
         recurse: yes
         state: directory
         owner: www-data
@@ -124,7 +123,7 @@
     - name: disable default "it works" site
       shell:
         cmd: "a2dissite 000-default"
-    - name: restart apache2
+    - name: reload apache2
       service:
         name: apache2
         state: reloaded
@@ -226,7 +225,8 @@
         password: "{{ mysql_wordpress_password }}"
         login_user: "{{ ansible_local.mysqlinfo.mysql_superuser }}"
         login_password: "{{ ansible_local.mysqlinfo.mysql_superuser_password }}"
-        priv: '*.*:ALL'
+        priv: "wordpress.*:ALL"
+        #priv: '*.*:ALL'
         state: present
       when: ansible_local.mysqlinfo is defined
 
@@ -257,6 +257,10 @@
       service:
         name: apache2
         state: restarted
+    - name: Reload Apache2
+      service:
+        name: apache2
+        state: reloaded
 
 - name: Configuring wordpress to connect to the database
   hosts: all
@@ -293,38 +297,7 @@
         - "sudo -u www-data sed -i s/database_name_here/wordpress/ {{ wpconfigfile }}"
         - "sudo -u www-data sed -i s/username_here/wordpress/ {{ wpconfigfile }}"
         - "sudo -u www-data sed -i s/password_here/{{ ansible_local.mysqlinfo.mysql_wordpress_password }}/ {{ wpconfigfile }}"
-    - name: get random secret keys
-      uri:
-        url: https://api.wordpress.org/secret-key/1.1/salt/
-        return_content: yes
-        body_format: json
-      register: wordpress_keys
-    - debug:
-        var: wordpress_keys.content
-    - name: delete existing bak file
-      file:
-        path: "{{ wpconfigfile }}.bak"
-        state: absent
-    - name: run script to remove key placeholders
-      become_user: www-data
-      script:
-        chdir: /srv/www/wordpress/
-        cmd: replacelines.py
-        executable: /usr/bin/python3
-        environment: /srv/www/wordpress/
-    - name: update config file
-      become_user: www-data
-      copy:
-        remote_src: yes
-        src: "{{ wpconfigfile }}.bak"
-        dest: "{{ wpconfigfile }}"
-    - blockinfile:
-        path: "{{ wpconfigfile }}"
-        marker: // {mark} ANSIBLE MANAGED BLOCK  
-        # having this separator here was giving me issues   
-        #block: |
-        block:
-          "{{ wordpress_keys.content }}"
+      notify: Restart Mysql
 
   handlers:
     - name: Restart Mysql
@@ -335,3 +308,7 @@
       service:
         name: apache2
         state: restarted
+    - name: Reload Apache2
+      service:
+        name: apache2
+        state: reloaded
