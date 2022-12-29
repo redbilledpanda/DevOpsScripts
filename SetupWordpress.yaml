@@ -1,0 +1,278 @@
+- name: "Installing wordpress dependencies"
+  hosts: all
+  become: True
+  gather_facts: True
+  vars:
+    get_installer: 'curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php || /bin/true'
+    get_signature: 'curl -sS https://composer.github.io/installer.sig'
+  tasks:
+        - name: "Update repository"
+          apt: 
+              update_cache: "yes"
+        - name: "Installing requirements"
+          apt:
+            name:
+                 - "curl"
+                 - "php"
+                 - "php-cli"
+                 - "gnupg"
+                 - "unzip"
+                 - "mysql-server"
+                 - "php-fpm"
+                 - "php-mysql"
+                 - "apache2"
+                 - "ghostscript"
+                 - "libapache2-mod-php"
+                 - "php-bcmath"
+                 - "php-curl"
+                 - "php-imagick"
+                 - "php-intl"
+                 - "php-json"
+                 - "php-mbstring"
+                 - "php-xml"
+                 - "php-zip"
+            state: present
+        - name: Populate service facts
+          ansible.builtin.service_facts:
+        - name: "stopping nginx if running"
+          service:
+            name: nginx
+            state: stopped
+          when: "'nginx' in ansible_facts.services"
+        - name: "remove nginx if installed"
+          apt:
+            name:
+                - "nginx"
+            state: absent
+        - name: stop Mysql
+          service:
+            name: mysql
+            state: stopped
+          when: "'mysql' in ansible_facts.services"
+        - name: stop apache2
+          service:
+            name: apache2
+            state: stopped
+          when: "'apache2' in ansible_facts.services"
+
+- name: Installing wordpress through source
+  hosts: all
+  become: True
+  gather_facts: False
+  vars:
+    wprootdir: "/srv/www/wordpress"
+  tasks:
+    - name: checking if wp src dir exists
+      stat:
+        path: "{{ wprootdir }}"
+      register: dir_details
+    - name: delete existing wordpress source files
+      become_user: www-data
+      no_log: True
+      file:
+        path: "{{ wprootdir }}"
+        state: absent
+    - name: creating /var/www for wordpress source
+      file:
+        path: "{{ wprootdir }}" 
+        recurse: yes
+        state: directory
+        owner: www-data
+        mode: '0755'  
+    - name: downloading and extracting wordpress source
+      shell:
+        cmd: "curl https://wordpress.org/latest.tar.gz | sudo -u www-data tar zx -C /srv/www"
+      register: status
+    - fail:
+        msg: "Unable to download or extract wordpress source"
+      when: (status.rc != 0)
+
+- name: Configuring apache for wordpress
+  hosts: all
+  become: True
+  gather_facts: False
+  vars:
+    wprootdir: "/srv/www/wordpress"
+    wpconffile: "/etc/apache2/sites-available/wordpress.conf"
+  tasks:
+    - name: deleting the file if it exists
+      file:
+        path: "{{ wpconffile }}"
+        state: absent
+    - name: creating wordpress conf file
+      file:
+        path: "{{ wpconffile }}"
+        state: touch
+        owner: www-data
+    - name: populating wordpress conf file
+      template:
+        src: apache2.j2
+        dest: "{{ wpconffile }}"
+    - name: enabling the site
+      shell:
+        cmd: "a2ensite wordpress"
+    - name: enable URL rewriting
+      shell:
+        cmd: "a2enmod rewrite"
+    - name: disable default "it works" site
+      shell:
+        cmd: "a2dissite 000-default"
+    - name: restart apache2
+      service:
+        name: apache2
+        state: reloaded
+
+- name: Configuring database
+  hosts: all
+  become: True
+  gather_facts: True
+  #gather_facts: yes
+  vars:
+    mysql_port: 3306
+    mysql_socket: /var/run/mysqld/mysqld.sock
+    mysql_superuser: root
+    mysql_superuser_home: "{% if mysql_superuser == 'root' %}/root{% else %}/home/{{ mysql_superuser }}{% endif %}"
+    mysql_superuser_password: SuperUserPwd
+    mysql_wordpress_password: WordpressPwd
+    http_port: 80  
+  tasks:
+    - name: Installing PyMySql through pip
+      pip:
+        name: PyMySql
+        state: present
+    - name: ensure mysql is running and starts on boot
+      service:
+        name: mysql
+        state: started
+        enabled: True
+          
+    - name: Removes anonymous user account for localhost
+      community.mysql.mysql_user:
+        name: ''
+        state: absent
+        login_user: root
+        login_password: ""
+        login_unix_socket: "{{ mysql_socket }}"
+      when: ansible_local.mysqlinfo is undefined      
+
+    - name: adding a password for root user
+      mysql_user:
+        # Update the superuser to have all grants and a password
+        name: "{{ mysql_superuser }}"
+        host: localhost
+        password: "{{ mysql_superuser_password }}"
+        priv: "*.*:ALL,GRANT"
+        # Login *as root* to perform this change, even though you might
+        # be altering the root user itself
+        login_user: root
+        login_password: ""
+        login_port: "{{ mysql_port }}"
+        login_host: localhost
+        login_unix_socket: "{{ mysql_socket }}"
+        # As a good measure,have ansible check whether an implicit login
+        # is possible first
+        check_implicit_admin: yes
+      when: ansible_local.mysqlinfo is undefined      
+    - name: "Create custom fact directory"
+      file:
+        path: "/etc/ansible/facts.d"
+        state: "directory"
+        recurse: yes
+      when: ansible_local.mysqlinfo is undefined      
+    - name: "record mysql info in custom fact"
+      template:
+        src: mysqlinfo.j2
+        dest: /etc/ansible/facts.d/mysqlinfo.fact
+        mode: 0644
+      when: ansible_local.mysqlinfo is undefined      
+    - name: "re-run setup to use custom facts"
+      setup:
+        filter: ansible_local
+      when: ansible_local.mysqlinfo is undefined      
+    - debug:
+        msg:
+          - "mysqlinfo is {{ ansible_local.mysqlinfo }}"
+      when: ansible_local.mysqlinfo is defined
+    - name: create database wordpress
+      mysql_db: 
+        db: wordpress
+        state: present
+        login_user: "{{ ansible_local.mysqlinfo.mysql_superuser }}"
+        login_password: "{{ ansible_local.mysqlinfo.mysql_superuser_password }}"
+        login_unix_socket: "{{ mysql_socket }}"
+      when: ansible_local.mysqlinfo is defined
+
+    - name: Create database user 'wordpress' with all database privileges
+      community.mysql.mysql_user:
+        name: wordpress
+        password: "{{ mysql_wordpress_password }}"
+        login_user: "{{ ansible_local.mysqlinfo.mysql_superuser }}"
+        login_password: "{{ ansible_local.mysqlinfo.mysql_superuser_password }}"
+        priv: '*.*:ALL'
+        state: present
+      when: ansible_local.mysqlinfo is defined
+
+    - name: Flush privileges
+      mysql_query:
+        login_db: wordpress
+        login_user: "{{ ansible_local.mysqlinfo.mysql_superuser }}"
+        login_password: "{{ ansible_local.mysqlinfo.mysql_superuser_password }}"
+        login_unix_socket: "{{ mysql_socket }}"
+        query: FLUSH PRIVILEGES 
+
+     # UFW Configuration
+    - name: "UFW - Allow HTTP on port {{ http_port }}"
+      ufw:
+        rule: allow
+        port: "{{ http_port }}"
+        proto: tcp
+      notify:
+      - Restart Mysql
+      tags: [ system ]
+
+  handlers:
+    - name: Restart Mysql
+      service:
+        name: mysql
+        state: restarted
+    - name: Restart Apache2
+      service:
+        name: apache2
+        state: restarted
+
+- name: Configuring wordpress to connect to the database
+  hosts: all
+  gather_facts: False
+  become: true
+  vars:
+    wpconfigfile: "/srv/www/wordpress/wp-config.php"
+  tasks:
+    - name: copy sample config to wp-config.php
+      #become_user: www-data
+      copy:
+        remote_src: yes
+        src: /srv/www/wordpress/wp-config-sample.php
+        dest: "{{ wpconfigfile }}"
+        owner: www-data
+
+    - name: "re-run setup to use custom facts"
+      setup:
+        filter: ansible_local
+    - name: set database credentials in the config file
+      become: false
+      command: "{{ item }}"
+      with_items:
+        - "sudo -u www-data sed -i s/database_name_here/wordpress/ {{ wpconfigfile }}"
+        - "sudo -u www-data sed -i s/username_here/wordpress/ {{ wpconfigfile }}"
+        - "sudo -u www-data sed -i s/password_here/{{ ansible_local.mysqlinfo.mysql_wordpress_password }}/ {{ wpconfigfile }}"
+      notify: Restart Mysql
+
+  handlers:
+    - name: Restart Mysql
+      service:
+        name: mysql
+        state: restarted
+    - name: Restart Apache2
+      service:
+        name: apache2
+        state: restarted
