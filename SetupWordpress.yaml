@@ -330,7 +330,7 @@
         #block: |
         block:
           "{{ wordpress_keys.content }}"
-        notify: Restart Mysql
+      notify: Restart Mysql
 
   handlers:
     - name: Restart Mysql
