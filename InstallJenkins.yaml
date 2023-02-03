@@ -1,11 +1,24 @@
-- name: "Install jenkins on Xubuntu slave"
+- name: "Install jenkins on ubuntu slave"
   hosts: all
   become: True
+  gather_facts: no
   tasks:
-        - name: "check if jenkins present"
-          shell:
-            cmd: "jenkins --version"
-          register: jenkinsrc
-          failed_when: false
-        - debug:
-            msg: "{{ jenkinsrc }}"
+    - name: "check if java present"
+      shell:
+        cmd: "java -version"
+      register: javaversion
+      failed_when: false
+    - name: "install java if not present"
+      apt: 
+        name: openjdk-11-jre
+        state: present
+      when: javaversion.rc == 127
+    - name: "check if jenkins present"
+      shell:
+        cmd: "jenkins --version"
+      register: jenkinsrc
+      failed_when: false
+    - debug:
+        msg: "{{ jenkinsrc }}"
+    - include_tasks: JenkinsInstaller.yaml
+      when: jenkinsrc.rc == 127
