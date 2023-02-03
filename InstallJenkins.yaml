@@ -1,0 +1,11 @@
+- name: "Install jenkins on Xubuntu slave"
+  hosts: all
+  become: True
+  tasks:
+        - name: "check if jenkins present"
+          shell:
+            cmd: "jenkins --version"
+          register: jenkinsrc
+          failed_when: false
+        - debug:
+            msg: "{{ jenkinsrc }}"
