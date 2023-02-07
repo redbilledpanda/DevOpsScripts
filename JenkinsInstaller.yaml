@@ -1,6 +1,11 @@
 - name: "Get GPG key from the Jenkins portal"
+  get_url:
+    url: https://pkg.jenkins.io/debian-stable/jenkins.io.key
+    dest: /usr/share/keyrings/jenkins.io.key
+- name: "De-arm the keys"
+  become: true
   shell:
-    cmd: wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key |sudo gpg --dearmor -o /usr/share/keyrings/jenkins.gpg
+    cmd: "gpg --dearmor -o /usr/share/keyrings/jenkins.gpg /usr/share/keyrings/jenkins.io.key"
   register: jenkinskey
 - debug:
     msg: "{{ jenkinskey }}"
