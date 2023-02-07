@@ -2,6 +2,7 @@
   hosts: all
   become: True
   gather_facts: no
+  no_log: true
   tasks:
     - name: "check if java present"
       shell:
@@ -21,4 +22,5 @@
     - debug:
         msg: "{{ jenkinsrc }}"
     - include_tasks: JenkinsInstaller.yaml
-      #when: jenkinsrc.rc == 127
+      when: jenkinsrc.rc == 127
+    - include_tasks: ansibleplugins.yaml

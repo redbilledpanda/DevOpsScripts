@@ -1,5 +1,5 @@
 - name: "Install docker on Xubuntu slave"
-  hosts: "{{ variable_host | default('web') }}"
+  hosts: all
   become: True
   tasks:
         - name: "Update repository"

@@ -2,10 +2,12 @@
   get_url:
     url: https://pkg.jenkins.io/debian-stable/jenkins.io.key
     dest: /usr/share/keyrings/jenkins.io.key
+- name: "Delete existing key"
+  become: true
+  shell: "rm -rf /usr/share/keyrings/jenkins.gpg"
 - name: "De-arm the keys"
   become: true
-  shell:
-    cmd: "gpg --dearmor -o /usr/share/keyrings/jenkins.gpg /usr/share/keyrings/jenkins.io.key"
+  shell: "gpg --dearmor -o /usr/share/keyrings/jenkins.gpg /usr/share/keyrings/jenkins.io.key"
   register: jenkinskey
 - debug:
     msg: "{{ jenkinskey }}"
@@ -16,14 +18,12 @@
 - debug:
     msg: "{{ updatesourceslist }}"
 - name: "Installing Jenkins"
+  no_log: false
   apt:
     name: jenkins
     update_cache: "yes"
-- name: "start jenkins service on startup"
-  service:
-    name: jenkins
-    state: started
-    enabled: True
+  notify:
+    - "start jenkins"
 - name: Allow all access to tcp port 8080
   community.general.ufw:
     rule: allow
