@@ -1,0 +1,11 @@
+- name: record updated mysql root password
+  hosts: all
+  tasks:
+    - name: setting a new fact
+      set_fact:
+        pwd_updated: True
+        cacheable: yes
+      when: ansible_facts["mysql_root_pwd_updated"] is not defined
+    - debug: 
+        var: pwd_updated
+      when: ansible_facts["mysql_root_pwd_updated"] is defined
